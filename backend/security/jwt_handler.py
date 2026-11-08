@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from jose import jwt
 from config.settings import JWT_SECRET, JWT_ALGORITHM, JWT_EXPIRE_MINUTES
 
@@ -6,7 +6,7 @@ def create_access_token(user_id: str, mobile: str) -> str:
     payload = {
         "sub": user_id,
         "mobile": mobile,
-        "exp": datetime.utcnow() + timedelta(minutes=JWT_EXPIRE_MINUTES),
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRE_MINUTES),
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 

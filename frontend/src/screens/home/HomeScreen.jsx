@@ -39,7 +39,7 @@ const cardShadow = {
 };
 
 // ─── Header ───────────────────────────────────────────────────────────────────
-function Header({ topInset, onMenuPress, onBellPress, onAddressPress }) {
+function Header({ topInset, onAddressPress }) {
   const imgH = Math.round(width / IMG_RATIO);
   const headerHeight = topInset + imgH;
 
@@ -50,21 +50,6 @@ function Header({ topInset, onMenuPress, onBellPress, onAddressPress }) {
         style={{ position: 'absolute', top: 0, left: 0, width, height: headerHeight }}
         resizeMode="stretch"
       />
-      <View style={[s.headerContent, { paddingTop: topInset + 12 }]}>
-        <View style={s.headerTop}>
-          <TouchableOpacity onPress={onMenuPress} style={s.roundIconBtn} activeOpacity={0.8}>
-            <View style={s.hamburger}>
-              <View style={s.hLine} />
-              <View style={[s.hLine, { width: 16 }]} />
-              <View style={s.hLine} />
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={onBellPress} style={s.roundIconBtn} activeOpacity={0.8}>
-            <Text style={s.headerIcon}>{'\uD83D\uDD14'}</Text>
-            <View style={s.badge}><Text style={s.badgeTxt}>3</Text></View>
-          </TouchableOpacity>
-        </View>
-      </View>
       <View style={s.addrWrap}>
         <TouchableOpacity style={s.addrCard} onPress={onAddressPress} activeOpacity={0.88}>
           <View style={s.addrIconCircle}><Text style={s.addrPinIcon}>{'\uD83D\uDCCD'}</Text></View>
@@ -313,8 +298,6 @@ export default function HomeScreen({ navigation }) {
       >
         <Header
           topInset={insets.top}
-          onMenuPress={() => {}}
-          onBellPress={() => {}}
           onAddressPress={() => navigation.navigate('LocationSelectionScreen')}
         />
 
@@ -369,23 +352,6 @@ const s = StyleSheet.create({
   scrollContent: { backgroundColor: C.white, flexGrow: 1, paddingBottom: 16 },
 
   // Header
-  headerContent: { paddingHorizontal: 18 },
-  headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  roundIconBtn: {
-    width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.16)',
-  },
-  hamburger: { width: 22, gap: 5 },
-  hLine: { width: 22, height: 2.5, borderRadius: 2, backgroundColor: C.white },
-  headerIcon: { fontSize: 19, color: C.white },
-  badge: {
-    position: 'absolute', top: -3, right: -2, minWidth: 18, height: 18, borderRadius: 9,
-    alignItems: 'center', justifyContent: 'center', backgroundColor: '#EF4444',
-    borderWidth: 1.5, borderColor: C.white,
-  },
-  badgeTxt: { color: C.white, fontSize: 10, fontWeight: '800' },
-
-  // Address card
   addrWrap: { position: 'absolute', left: 18, bottom: 0, width: width * 0.57, zIndex: 8 },
   addrCard: {
     height: ADDR_CARD_H, borderRadius: 14, paddingHorizontal: 12, backgroundColor: C.white,

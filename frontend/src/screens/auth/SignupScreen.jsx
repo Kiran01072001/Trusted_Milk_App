@@ -6,7 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 
-const API = 'http://10.163.104.165:8000';
+const API = 'http://192.168.1.3:8000';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HEADER_HEIGHT = SCREEN_WIDTH / 2; // image is exactly 2:1 ratio

@@ -1,52 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Image,
   StyleSheet, Dimensions, TextInput,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCart } from '../../context/CartContext';
 import { useAddress } from '../../context/AddressContext';
+import { completeOrder } from '../../services/referralService';
+import { getWalletBalance } from '../../services/walletService';
 
 const { width } = Dimensions.get('window');
-const H_PAD = 16;
+const SIDE = 14;  // Reduced from 16
 const TAB_BAR_SPACE = 90;
-const CHECKOUT_H = 70;
+const CHECKOUT_H = 60;  // Reduced from 70
+const CART_HEADER_RATIO = 2103 / 748;
+const OVERLAP = 16;  // Pull content over header
 
 const C = {
   primary: '#025F86', primary2: '#0D7EAA', white: '#FFFFFF',
   text: '#162536', sub: '#718096', line: '#E8EEF3',
   green: '#16A34A', red: '#EF4444', pale: '#F6FAFC', mint: '#F2FBF3',
 };
-const shadow = {
-  shadowColor: '#102A3D', shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.08, shadowRadius: 10, elevation: 4,
-};
-
 // ─── Header ───────────────────────────────────────────────────────────────────
-function Header({ topInset, onBack, totalItems }) {
+function Header({ topInset, onBack }) {
+  const imgH = Math.round(width / CART_HEADER_RATIO);
+  const headerHeight = topInset + imgH;
+
   return (
-    <LinearGradient
-      colors={['#025F86', '#0E7FB0', '#44ABD2']}
-      start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-      style={[styles.header, { paddingTop: topInset + 10 }]}
-    >
-      <View style={styles.headerRow}>
+    <View style={[styles.header, { height: headerHeight }]}>
+      <Image
+        source={require('../../../assets/headers/cart_header.png')}
+        style={[styles.headerImage, { height: headerHeight }]}
+        resizeMode="stretch"
+      />
+      <View style={[styles.headerRow, { paddingTop: topInset + 10 }]}>
         <TouchableOpacity onPress={onBack} style={styles.roundBtn} activeOpacity={0.8}>
-          <Text style={styles.backArrow}>{'←'}</Text>
+          <Text style={styles.backArrow}>{'\u2039'}</Text>
         </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Shopping Cart</Text>
-          <Text style={styles.headerSub}>Review your items and proceed</Text>
-        </View>
-        <View style={styles.headerRight}>
-          <View style={styles.roundBtn}>
-            <Text style={styles.headerIcon}>{'\uD83D\uDD14'}</Text>
-            <View style={styles.badge}><Text style={styles.badgeTxt}>{totalItems > 0 ? totalItems : '3'}</Text></View>
-          </View>
-        </View>
       </View>
-    </LinearGradient>
+    </View>
   );
 }
 
@@ -228,12 +220,22 @@ function Coupon() {
 // ─── Wallet ───────────────────────────────────────────────────────────────────
 function Wallet() {
   const [useWallet, setUseWallet] = useState(false);
+  const [walletBal, setWalletBal] = useState(null);
+
+  useEffect(() => {
+    getWalletBalance()
+      .then(d => setWalletBal(d.balance))
+      .catch(() => {});
+  }, []);
+
+  const balTxt = walletBal !== null ? `₹${walletBal.toFixed(2)}` : '—';
+
   return (
     <Card>
       <SectionTitle icon={'\uD83D\uDCB0'} title="Wallet" />
       <View style={styles.walletRow}>
         <View style={styles.walletLeft}>
-          <Text style={styles.walletBal}>Balance: {'\u20B9'}250</Text>
+          <Text style={styles.walletBal}>Balance: {balTxt}</Text>
           <Text style={styles.walletSub}>Available wallet balance</Text>
         </View>
         <TouchableOpacity
@@ -336,7 +338,7 @@ function DeliveryInstructions() {
 }
 
 // ─── Checkout Bar ─────────────────────────────────────────────────────────────
-function CheckoutBar({ totalItems, totalAmt, saving, bottomInset, onPress }) {
+function CheckoutBar({ totalItems, totalAmt, saving, bottomInset, onPress, disabled }) {
   const delivery = totalAmt > 299 ? 0 : 30;
   const payable = totalAmt + delivery - saving;
   return (
@@ -345,7 +347,12 @@ function CheckoutBar({ totalItems, totalAmt, saving, bottomInset, onPress }) {
         <Text style={styles.checkoutItems}>{totalItems} {totalItems === 1 ? 'Item' : 'Items'}</Text>
         <Text style={styles.checkoutSave}>You save {'\u20B9'}{saving}</Text>
       </View>
-      <TouchableOpacity style={styles.checkoutBtn} onPress={onPress} activeOpacity={0.88}>
+      <TouchableOpacity
+        style={[styles.checkoutBtn, disabled && { opacity: 0.6 }]}
+        onPress={onPress}
+        disabled={disabled}
+        activeOpacity={0.88}
+      >
         <Text style={styles.checkoutAmt}>{'\u20B9'}{payable}</Text>
         <Text style={styles.checkoutBtnTxt}>Proceed to Checkout {'›'}</Text>
       </TouchableOpacity>
@@ -356,33 +363,69 @@ function CheckoutBar({ totalItems, totalAmt, saving, bottomInset, onPress }) {
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function CartScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const { cartItems, totalItems, totalAmt, saving, updateCart, removeItem } = useCart();
+  const { cartItems, totalItems, totalAmt, saving, updateCart, removeItem, clearCart } = useCart();
+  const [checkingOut, setCheckingOut] = useState(false);
+
+  const handleCheckout = async () => {
+    if (checkingOut) return;
+    setCheckingOut(true);
+
+    const orderId = `TM${Date.now()}`;
+
+    // Snapshot cart BEFORE clearing — OrderSuccessScreen needs it
+    const snapshot = {
+      orderId,
+      cartItems:   cartItems.map(i => ({ ...i })),
+      totalAmt,
+      totalItems,
+    };
+
+    // Navigate + clear cart immediately for instant UX
+    clearCart();
+    navigation.navigate('OrderSuccessScreen', snapshot);
+
+    // Fire backend reward call in background — doesn't block the UX
+    try {
+      await completeOrder(orderId, 'PAID');
+    } catch (err) {
+      console.warn('[CartScreen] completeOrder failed:', err?.message ?? err);
+    } finally {
+      setCheckingOut(false);
+    }
+  };
 
   return (
     <View style={styles.root}>
       <Header
         topInset={insets.top}
         onBack={() => navigation.goBack()}
-        totalItems={totalItems}
       />
 
-      <ScrollView
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingBottom: CHECKOUT_H + TAB_BAR_SPACE + 16 },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        <DeliveryAddress onChange={() => navigation.navigate('LocationSelectionScreen')} />
-        <DeliveryTime />
-        <CartItemsSection cartItems={cartItems} updateCart={updateCart} removeItem={removeItem} />
-        <Subscription />
-        <Coupon />
-        <Wallet />
-        <BillDetails totalAmt={totalAmt} saving={saving} />
-        <PaymentMethod />
-        <DeliveryInstructions />
-      </ScrollView>
+      {/* Single continuous white page surface */}
+      <View style={styles.page}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          showsVerticalScrollIndicator={false}
+        >
+          <DeliveryAddress onChange={() => navigation.navigate('LocationSelectionScreen')} />
+          <View style={styles.separator} />
+          <DeliveryTime />
+          <View style={styles.separator} />
+          <CartItemsSection cartItems={cartItems} updateCart={updateCart} removeItem={removeItem} />
+          <View style={styles.separator} />
+          <Subscription />
+          <View style={styles.separator} />
+          <Coupon />
+          <View style={styles.separator} />
+          <Wallet />
+          <View style={styles.separator} />
+          <BillDetails totalAmt={totalAmt} saving={saving} />
+          <View style={styles.separator} />
+          <PaymentMethod />
+          <View style={styles.separator} />
+          <DeliveryInstructions />
+        </ScrollView>
+      </View>
 
       {totalItems > 0 && (
         <CheckoutBar
@@ -390,7 +433,8 @@ export default function CartScreen({ navigation }) {
           totalAmt={totalAmt}
           saving={saving}
           bottomInset={insets.bottom}
-          onPress={() => navigation.navigate('CheckoutScreen')}
+          onPress={handleCheckout}
+          disabled={checkingOut}
         />
       )}
     </View>
@@ -398,56 +442,70 @@ export default function CartScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F4F7FA' },
-  scroll: { paddingHorizontal: H_PAD, paddingTop: 14, gap: 12 },
+  root: { flex: 1, backgroundColor: C.white },
+  
+  // Page surface - single continuous white sheet
+  page: {
+    flex: 1,
+    marginTop: -OVERLAP,
+    marginHorizontal: SIDE,
+    backgroundColor: C.white,
+    borderRadius: 18,
+    overflow: 'hidden',
+    shadowColor: '#1A3040',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 10,
+    elevation: 3,
+    marginBottom: 10,
+  },
+  
+  scroll: { paddingBottom: CHECKOUT_H + TAB_BAR_SPACE + 16 },
+  
+  // Separator between sections
+  separator: { borderTopWidth: 1, borderTopColor: C.line },
 
   // Header
-  header: { paddingHorizontal: 18, paddingBottom: 16, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  headerCenter: { flex: 1, alignItems: 'center' },
-  headerRight: { width: 36 },
-  headerTitle: { color: C.white, fontSize: 20, fontWeight: '900' },
-  headerSub: { color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '600', marginTop: 2 },
-  roundBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.18)', position: 'relative' },
-  backArrow: { color: C.white, fontSize: 20, fontWeight: '700' },
-  headerIcon: { fontSize: 18, color: C.white },
-  badge: { position: 'absolute', top: -2, right: -2, minWidth: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EF4444', borderWidth: 1.5, borderColor: C.white },
-  badgeTxt: { color: C.white, fontSize: 9, fontWeight: '800' },
+  header: { width, overflow: 'hidden', backgroundColor: C.white },
+  headerImage: { position: 'absolute', top: 0, left: 0, width: '100%' },
+  headerRow: { paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center' },
+  roundBtn: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.18)' },
+  backArrow: { color: C.white, fontSize: 32, fontWeight: '500', lineHeight: 32 },
 
-  // Card
-  card: { backgroundColor: C.white, borderRadius: 16, padding: 16, ...shadow },
-  emptyCard: { alignItems: 'center', paddingVertical: 32 },
-  emptyIcon: { fontSize: 48, marginBottom: 12 },
-  emptyTxt: { fontSize: 16, fontWeight: '800', color: C.text, marginBottom: 6 },
-  emptySub: { fontSize: 12, color: C.sub, textAlign: 'center' },
+  // Card - now integrated into single page
+  card: { backgroundColor: 'transparent', borderRadius: 0, paddingHorizontal: SIDE, paddingVertical: 12, borderBottomWidth: 0 },
+  emptyCard: { alignItems: 'center', paddingVertical: 28 },
+  emptyIcon: { fontSize: 44, marginBottom: 10 },
+  emptyTxt: { fontSize: 15, fontWeight: '800', color: C.text, marginBottom: 5 },
+  emptySub: { fontSize: 11.5, color: C.sub, textAlign: 'center' },
 
   // Section title
-  sectionTitle: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
-  sectionIcon: { fontSize: 16, marginRight: 8 },
-  sectionTitleTxt: { fontSize: 15, fontWeight: '900', color: C.text },
+  sectionTitle: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  sectionIcon: { fontSize: 15, marginRight: 7 },
+  sectionTitleTxt: { fontSize: 14, fontWeight: '900', color: C.text },
 
   // Address
   addrRow: { flexDirection: 'row', alignItems: 'center' },
   addrInfo: { flex: 1 },
   addrLabel: { fontSize: 9, color: C.sub, fontWeight: '800', letterSpacing: 0.8, marginBottom: 3 },
-  addrText: { fontSize: 13, color: C.text, fontWeight: '700', lineHeight: 18 },
-  changeBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, backgroundColor: '#EFF8FC', borderWidth: 1, borderColor: '#C8E8F5' },
-  changeTxt: { fontSize: 12, color: C.primary, fontWeight: '800' },
+  addrText: { fontSize: 12.5, color: C.text, fontWeight: '700', lineHeight: 17 },
+  changeBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 9, backgroundColor: '#EFF8FC', borderWidth: 1, borderColor: '#C8E8F5' },
+  changeTxt: { fontSize: 11.5, color: C.primary, fontWeight: '800' },
 
   // Radio
-  radioRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, gap: 10 },
-  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: C.sub, alignItems: 'center', justifyContent: 'center' },
+  radioRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 7, gap: 9 },
+  radio: { width: 19, height: 19, borderRadius: 10, borderWidth: 2, borderColor: C.sub, alignItems: 'center', justifyContent: 'center' },
   radioActive: { borderColor: C.primary },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: C.primary },
-  radioIcon: { fontSize: 16 },
-  radioLabel: { fontSize: 13, fontWeight: '700', color: C.text },
-  radioSub: { fontSize: 11, color: C.sub, fontWeight: '600' },
+  radioDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: C.primary },
+  radioIcon: { fontSize: 15 },
+  radioLabel: { fontSize: 12.5, fontWeight: '700', color: C.text },
+  radioSub: { fontSize: 10.5, color: C.sub, fontWeight: '600' },
 
   // Cart item
-  cartItem: { flexDirection: 'row', gap: 12, paddingVertical: 4 },
-  itemImg: { width: 72, height: 72, borderRadius: 12, backgroundColor: C.pale },
+  cartItem: { flexDirection: 'row', gap: 11, paddingVertical: 4 },
+  itemImg: { width: 68, height: 68, borderRadius: 11, backgroundColor: C.pale },
   itemBody: { flex: 1 },
-  itemTopRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
+  itemTopRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 7 },
   itemBadgeRow: { marginBottom: 3 },
   freshBadge: { fontSize: 9, fontWeight: '800', color: C.green, backgroundColor: '#F0FDF4', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, overflow: 'hidden', alignSelf: 'flex-start' },
   itemName: { fontSize: 13, fontWeight: '900', color: C.text, marginBottom: 2 },
@@ -501,7 +559,7 @@ const styles = StyleSheet.create({
   instrTxtActive: { color: C.primary },
 
   // Checkout bar
-  checkoutBar: { backgroundColor: C.white, paddingHorizontal: H_PAD, paddingTop: 12, borderTopWidth: 1, borderTopColor: C.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', ...shadow },
+  checkoutBar: { backgroundColor: C.white, paddingHorizontal: SIDE, paddingTop: 12, borderTopWidth: 1, borderTopColor: C.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   checkoutInfo: { flex: 1 },
   checkoutItems: { fontSize: 13, fontWeight: '800', color: C.text },
   checkoutSave: { fontSize: 11, color: C.green, fontWeight: '700', marginTop: 2 },

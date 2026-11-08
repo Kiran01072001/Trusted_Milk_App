@@ -1,31 +1,43 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Animated, View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import HomeScreen from '../screens/home/HomeScreen';
 import ProductListScreen from '../screens/products/ProductListScreen';
+import WalletScreen from '../screens/wallet/WalletScreen';
+import AccountScreen from '../screens/profile/AccountScreen';
 import CartScreen from '../screens/cart/CartScreen';
-import { useCart } from '../context/CartContext';
+import OrderSuccessScreen from '../screens/cart/OrderSuccessScreen';
+import LocationSelectionScreen from '../screens/home/LocationSelectionScreen';
+import AddAddressScreen from '../screens/profile/AddAddressScreen';
+import ReferEarnScreen from '../screens/profile/ReferEarnScreen';
+import OfferDetailsScreen from '../screens/home/OfferDetailsScreen';
+import ProductDetailsScreen from '../screens/products/ProductDetailsScreen';
+import CheckoutScreen from '../screens/cart/CheckoutScreen';
 
 const Tab = createBottomTabNavigator();
-const ACTIVE = '#1EAFF2';
-const INACTIVE = '#8FA3B1';
+const { width } = Dimensions.get('window');
+const ACTIVE = '#2196F3';
+const INACTIVE = '#8A8F98';
 const WHITE = '#FFFFFF';
+const PILL_W = Math.min(width - 28, 430);
 
 const TABS = {
-  Home:     { icon: 'home-variant',           label: 'Home' },
-  Products: { icon: 'view-grid-outline',       label: 'Products' },
-  Cart:     { icon: 'cart-outline',            label: 'Cart' },
-  Orders:   { icon: 'package-variant-closed',  label: 'Orders' },
-  Account:  { icon: 'account-circle-outline',  label: 'Account' },
+  Home: { icon: 'home-variant-outline', activeIcon: 'home-variant', label: 'Home' },
+  Products: { icon: 'view-grid-outline', activeIcon: 'view-grid', label: 'Products' },
+  Wallet: { icon: 'wallet-outline', activeIcon: 'wallet', label: 'Wallet' },
+  Subscriptions: { icon: 'calendar-sync-outline', activeIcon: 'calendar-sync', label: 'Subscriptions' },
+  Account: { icon: 'account-circle-outline', activeIcon: 'account-circle', label: 'Account' },
 };
 
 function PlaceholderScreen({ route }) {
+  const tab = TABS[route.name] || { icon: 'apps', label: route.name };
+
   return (
     <View style={styles.placeholder}>
-      <MaterialCommunityIcons name={TABS[route.name]?.icon || 'home'} size={52} color={ACTIVE} />
-      <Text style={styles.phTitle}>{route.name}</Text>
+      <MaterialCommunityIcons name={tab.icon} size={52} color={ACTIVE} />
+      <Text style={styles.phTitle}>{tab.label}</Text>
       <Text style={styles.phSub}>Coming Soon</Text>
     </View>
   );
@@ -34,82 +46,60 @@ function PlaceholderScreen({ route }) {
 function TabItem({ route, descriptor, navigation, isFocused }) {
   const tab = TABS[route.name];
   const color = isFocused ? ACTIVE : INACTIVE;
+  const progress = useRef(new Animated.Value(isFocused ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.spring(progress, {
+      toValue: isFocused ? 1 : 0,
+      friction: 8,
+      tension: 120,
+      useNativeDriver: true,
+    }).start();
+  }, [isFocused, progress]);
 
   const onPress = () => {
     const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
     if (!isFocused && !event.defaultPrevented) navigation.navigate(route.name);
   };
 
+  const scale = progress.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
+  const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [0, -2] });
+
   return (
     <TouchableOpacity
       accessibilityRole="button"
       accessibilityState={isFocused ? { selected: true } : {}}
-      accessibilityLabel={descriptor.options.tabBarAccessibilityLabel}
+      accessibilityLabel={descriptor.options.tabBarAccessibilityLabel || tab.label}
       testID={descriptor.options.tabBarTestID}
       onPress={onPress}
-      activeOpacity={0.75}
+      activeOpacity={0.78}
       style={styles.tabItem}
     >
-      <View style={[styles.iconSpot, isFocused && styles.iconSpotActive]}>
-        <MaterialCommunityIcons name={tab.icon} size={22} color={color} />
-      </View>
+      <Animated.View style={[styles.iconSpot, isFocused && styles.iconSpotActive, { transform: [{ scale }, { translateY }] }]}>
+        <MaterialCommunityIcons name={isFocused ? tab.activeIcon : tab.icon} size={22} color={color} />
+      </Animated.View>
       <Text style={[styles.tabLabel, { color }]} numberOfLines={1}>{tab.label}</Text>
-    </TouchableOpacity>
-  );
-}
-
-function CartFab({ route, descriptor, navigation, isFocused }) {
-  const { totalItems } = useCart();
-
-  const onPress = () => {
-    const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
-    if (!isFocused && !event.defaultPrevented) navigation.navigate(route.name);
-  };
-
-  return (
-    <TouchableOpacity
-      accessibilityRole="button"
-      accessibilityState={isFocused ? { selected: true } : {}}
-      accessibilityLabel={descriptor.options.tabBarAccessibilityLabel}
-      testID={descriptor.options.tabBarTestID}
-      onPress={onPress}
-      activeOpacity={0.88}
-      style={styles.fabSlot}
-    >
-      <View style={[styles.cartFab, isFocused && styles.cartFabActive]}>
-        <MaterialCommunityIcons name="cart-outline" size={24} color={WHITE} />
-        {totalItems > 0 && (
-          <View style={styles.cartBadge}>
-            <Text style={styles.cartBadgeText}>{Math.min(totalItems, 99)}</Text>
-          </View>
-        )}
-      </View>
-      <Text style={[styles.tabLabel, { color: isFocused ? ACTIVE : INACTIVE }]}>Cart</Text>
     </TouchableOpacity>
   );
 }
 
 function CustomTabBar({ state, descriptors, navigation }) {
   const insets = useSafeAreaInsets();
+  const visibleRoutes = state.routes.filter(route => TABS[route.name]);
+  const currentRoute = state.routes[state.index];
+  const focusedRouteKey = TABS[currentRoute?.name]
+    ? currentRoute.key
+    : [...(state.history || [])]
+        .reverse()
+        .map(entry => entry.key)
+        .find(key => TABS[state.routes.find(route => route.key === key)?.name]);
 
   return (
-    <View style={[styles.outerWrap, { paddingBottom: insets.bottom }]}>
-      <View style={styles.tabRow}>
-        {state.routes.map((route, index) => {
+    <View style={[styles.navShell, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+      <View style={styles.navPill}>
+        {visibleRoutes.map((route) => {
           const descriptor = descriptors[route.key];
-          const isFocused = state.index === index;
-
-          if (route.name === 'Cart') {
-            return (
-              <CartFab
-                key={route.key}
-                route={route}
-                descriptor={descriptor}
-                navigation={navigation}
-                isFocused={isFocused}
-              />
-            );
-          }
+          const isFocused = focusedRouteKey === route.key;
 
           return (
             <TabItem
@@ -135,32 +125,50 @@ export default function BottomTabNavigator() {
         sceneContainerStyle: { backgroundColor: WHITE },
       }}
     >
-      <Tab.Screen name="Home"     component={HomeScreen} />
-      <Tab.Screen name="Products" component={ProductListScreen} />
-      <Tab.Screen name="Cart"     component={CartScreen} />
-      <Tab.Screen name="Orders"   component={PlaceholderScreen} />
-      <Tab.Screen name="Account"  component={PlaceholderScreen} />
+      <Tab.Screen name="Home"          component={HomeScreen} />
+      <Tab.Screen name="Products"      component={ProductListScreen} />
+      <Tab.Screen name="Wallet"        component={WalletScreen} />
+      <Tab.Screen name="Subscriptions" component={PlaceholderScreen} />
+      <Tab.Screen name="Account"       component={AccountScreen} />
+      <Tab.Screen name="Cart" component={CartScreen} />
+      <Tab.Screen name="OrderSuccessScreen" component={OrderSuccessScreen} />
+      <Tab.Screen name="LocationSelectionScreen" component={LocationSelectionScreen} />
+      <Tab.Screen name="AddAddressScreen" component={AddAddressScreen} />
+      <Tab.Screen name="ReferEarnScreen" component={ReferEarnScreen} />
+      <Tab.Screen name="OfferDetailsScreen" component={OfferDetailsScreen} />
+      <Tab.Screen name="ProductListScreen" component={ProductListScreen} />
+      <Tab.Screen name="ProductDetailsScreen" component={ProductDetailsScreen} />
+      <Tab.Screen name="CheckoutScreen" component={CheckoutScreen} />
     </Tab.Navigator>
   );
 }
 
 const styles = StyleSheet.create({
-  outerWrap: {
+  navShell: {
     backgroundColor: WHITE,
-    paddingHorizontal: 4,
-    paddingTop: 4,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#D8E6EF',
+    alignItems: 'center',
+    paddingTop: 0,
+    borderTopWidth: 1,
+    borderTopColor: '#E7EEF4',
   },
 
-  tabRow: {
-    height: 60,
+  navPill: {
+    width: PILL_W,
+    minHeight: 68,
+    borderRadius: 0,
+    backgroundColor: WHITE,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
+    borderWidth: 0,
   },
 
-  // Regular tab — icon pill + label, fixed height matches tabRow
   tabItem: {
     flex: 1,
     height: 60,
@@ -168,45 +176,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // Cart slot — identical dimensions to tabItem
-  fabSlot: {
-    flex: 1,
-    height: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
   iconSpot: {
-    width: 32, height: 28, borderRadius: 14,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  iconSpotActive: { backgroundColor: '#E6F6FE' },
-  tabLabel: { fontSize: 10, fontWeight: '700', marginTop: 3, color: INACTIVE },
-
-  // Cart FAB — 44px circle so icon(24) + marginTop(3) + label(13) = 40px fits in 60px slot
-  cartFab: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: ACTIVE,
+    width: 42,
+    height: 32,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#0D7EAA',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 5,
   },
-  cartFabActive: { backgroundColor: '#0EA5E9' },
-  cartBadge: {
-    position: 'absolute', top: 1, right: 1,
-    minWidth: 15, height: 15, borderRadius: 8,
-    backgroundColor: '#EF4444',
-    alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 3,
-    borderWidth: 1.5, borderColor: WHITE,
-  },
-  cartBadgeText: { color: WHITE, fontSize: 8, fontWeight: '900' },
+  iconSpotActive: { backgroundColor: '#E3F2FD' },
+  tabLabel: { fontSize: 10, fontWeight: '800', marginTop: 2, color: INACTIVE },
 
   placeholder: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: WHITE },
   phTitle: { fontSize: 22, fontWeight: '800', color: ACTIVE, marginTop: 14, marginBottom: 6 },

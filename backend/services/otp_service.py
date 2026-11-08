@@ -1,8 +1,18 @@
 import httpx
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from config.settings import TWO_FACTOR_API_KEY
 from config.app_config import database
+
+
+def _normalize_datetime(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc).astimezone(timezone.utc).replace(tzinfo=None)
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
 
 _SEND_URL = "https://2factor.in/API/V1/{key}/SMS/{mobile}/AUTOGEN"
 _VERIFY_URL = "https://2factor.in/API/V1/{key}/SMS/VERIFY/{session}/{otp}"
@@ -17,7 +27,7 @@ async def send_otp(mobile_number: str) -> dict:
         return {"success": False, "message": data.get("Details", "Failed to send OTP")}
 
     session_id = data["Details"]
-    now = datetime.utcnow()
+    now = _normalize_datetime(datetime.now(timezone.utc))
 
     existing = await database.fetch_one(
         "SELECT id FROM users WHERE mobile_number = :mobile",
@@ -56,7 +66,15 @@ async def verify_otp(mobile_number: str, otp: str) -> dict:
     if not row or not row["otp_session_id"]:
         return {"success": False, "message": "OTP not sent for this number"}
 
-    if datetime.utcnow() - row["otp_sent_at"] > timedelta(minutes=10):
+    otp_sent_at = _normalize_datetime(row["otp_sent_at"])
+    if otp_sent_at is None:
+        return {"success": False, "message": "OTP expired"}
+
+    current_time = _normalize_datetime(datetime.now(timezone.utc))
+    if current_time is None:
+        return {"success": False, "message": "OTP expired"}
+
+    if current_time - otp_sent_at > timedelta(minutes=10):
         return {"success": False, "message": "OTP expired"}
 
     url = _VERIFY_URL.format(

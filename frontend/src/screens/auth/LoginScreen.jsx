@@ -5,8 +5,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../../context/AuthContext';
 
-const API = 'http://10.163.104.165:8000';
+const API = 'http://192.168.1.70:8000';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HEADER_HEIGHT = SCREEN_WIDTH / 2;
 
@@ -22,6 +23,7 @@ const COLORS = {
 };
 
 export default function LoginScreen({ navigation }) {
+  const { login } = useAuth();
   const [mobile, setMobile] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -92,13 +94,22 @@ export default function LoginScreen({ navigation }) {
       });
       const data = await res.json();
       if (data.status === 'success') {
-        await AsyncStorage.multiSet([
-          ['token', data.token],
-          ['customer_code', data.customer_code],
-          ['full_name', data.full_name],
-        ]);
-        navigation.replace('AppRoot');
-      } else {
+          // Persist token for apiFetch and update AuthContext state
+          await AsyncStorage.multiSet([
+            ['token',         data.token],
+            ['customer_code', data.customer_code],
+            ['full_name',     data.full_name],
+            ['user_id',       data.user_id ?? ''],
+          ]);
+          await login({
+            token:         data.token,
+            customer_code: data.customer_code,
+            full_name:     data.full_name,
+            user_id:       data.user_id ?? '',
+          });
+          // AuthContext.login() sets user state → RootNavigator in App.jsx
+          // automatically swaps to AppNavigator. No manual navigation needed.
+        } else {
         Alert.alert('Error', data.message || 'Login failed');
       }
     } catch (e) {

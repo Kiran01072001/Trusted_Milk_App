@@ -34,7 +34,7 @@ const shadow = {
 };
 
 // Header
-function Header({ topInset, onMenuPress, onBellPress }) {
+function Header({ topInset }) {
   const imgH = Math.round(width / IMG_RATIO);
   const headerHeight = topInset + imgH;
 
@@ -45,23 +45,11 @@ function Header({ topInset, onMenuPress, onBellPress }) {
         style={{ position: 'absolute', top: 0, left: 0, width, height: headerHeight }}
         resizeMode="stretch"
       />
-      {/* Single row: menu | title+subtitle | bell */}
       <View style={[styles.headerTop, { paddingTop: topInset + 14 }]}>
-        <TouchableOpacity onPress={onMenuPress} style={styles.roundIconBtn} activeOpacity={0.8}>
-          <View style={styles.hamburger}>
-            <View style={styles.hLine} />
-            <View style={[styles.hLine, { width: 16 }]} />
-            <View style={styles.hLine} />
-          </View>
-        </TouchableOpacity>
         <View style={styles.headerCopy}>
           <Text style={styles.headerTitle}>Products</Text>
           <Text style={styles.headerSub} numberOfLines={1}>Fresh dairy products delivered to your doorstep</Text>
         </View>
-        <TouchableOpacity onPress={onBellPress} style={styles.roundIconBtn} activeOpacity={0.8}>
-          <Text style={styles.headerIcon}>{'\uD83D\uDD14'}</Text>
-          <View style={styles.badge}><Text style={styles.badgeTxt}>3</Text></View>
-        </TouchableOpacity>
       </View>
     </View>
   );
@@ -215,11 +203,7 @@ export default function ProductListScreen({ navigation, route }) {
 
   return (
     <View style={styles.root}>
-      <Header
-        topInset={insets.top}
-        onMenuPress={() => {}}
-        onBellPress={() => {}}
-      />
+      <Header topInset={insets.top} />
 
       <View style={styles.stickyBar}>
         <SearchBar value={search} onChange={setSearch} />
@@ -262,24 +246,10 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.white },
 
 // Header styles
-  header: {},
-  headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18 },
-  headerCopy: { flex: 1, paddingHorizontal: 12 },
-  headerTitle: { color: C.white, fontSize: 20, fontWeight: '900', lineHeight: 24 },
-  headerSub: { color: 'rgba(255,255,255,0.85)', fontSize: 10, fontWeight: '600', marginTop: 2 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  roundIconBtn: {
-    width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.16)', position: 'relative',
-  },
-  hamburger: { width: 22, gap: 5 },
-  hLine: { width: 22, height: 2.5, borderRadius: 2, backgroundColor: C.white },
-  headerIcon: { fontSize: 19, color: C.white },
-  badge: {
-    position: 'absolute', top: -3, right: -2, minWidth: 18, height: 18, borderRadius: 9,
-    alignItems: 'center', justifyContent: 'center', backgroundColor: '#EF4444', borderWidth: 1.5, borderColor: C.white,
-  },
-  badgeTxt: { color: C.white, fontSize: 10, fontWeight: '800' },
+  headerTop: { paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start' },
+  headerCopy: { flex: 1, paddingHorizontal: 0, alignItems: 'flex-start' },
+  headerTitle: { color: C.white, fontSize: 20, fontWeight: '900', lineHeight: 24, textAlign: 'left' },
+  headerSub: { color: 'rgba(255,255,255,0.85)', fontSize: 10, fontWeight: '600', marginTop: 2, textAlign: 'left' },
 
   // Sticky bar
   stickyBar: { backgroundColor: C.white, paddingTop: 12, paddingBottom: 4, zIndex: 10 },
